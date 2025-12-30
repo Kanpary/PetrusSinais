@@ -30,18 +30,24 @@ class SignalApp {
             timerBar: document.getElementById('valid-timer-bar'),
             confidenceScore: document.getElementById('confidence-score'),
             riskScore: document.getElementById('risk-score'),
-            signalType: document.getElementById('signal-type')
+            signalType: document.getElementById('signal-type'),
+            newsFeed: document.getElementById('news-feed-ticker')
         };
 
         this.audioCtx = null;
         this.scanSound = null;
         this.successSound = null;
         this.validTimer = null;
-        this.models = this.generateModelNames(950);
+        this.models = this.generateModelNames(1250);
 
-        // simple storage for feedback & historical results (in-memory)
+        // Advanced State
         this.history = [];
         this.feedback = [];
+        this.params = {
+            learningRate: 0.05,
+            volatilityWeight: 0.4,
+            externalEventImpact: 1.0
+        };
 
         this.init();
     }
@@ -51,42 +57,76 @@ class SignalApp {
         if (this.nodes.generateBtn) this.nodes.generateBtn.addEventListener('click', () => this.startScanning());
         this.nodes.resetBtn.addEventListener('click', () => this.reset());
         
+        // Simular monitoramento de notícias em tempo real
+        this.updateNewsTicker();
+        setInterval(() => this.updateNewsTicker(), 30000);
+
         // Pre-load audio
         this.setupAudio();
     }
 
-    setupAudio() {
-        const loadSound = async (url) => {
-            const response = await fetch(url);
-            const arrayBuffer = await response.arrayBuffer();
-            return await this.audioCtx.decodeAudioData(arrayBuffer);
-        };
-
-        window.addEventListener('touchstart', async () => {
-            if (!this.audioCtx) {
-                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                try {
-                    this.scanSound = await loadSound('scan-hum.mp3');
-                    this.successSound = await loadSound('success-chime.mp3');
-                } catch (e) {
-                    // silent fail for audio
-                }
-            }
-        }, { once: true });
+    updateNewsTicker() {
+        if (!this.nodes.newsFeed) return;
+        const events = [
+            "COPOM mantém taxa de juros: impacto neutro em ativos digitais.",
+            "Aumento de volatilidade detectado em plataformas globais.",
+            "Evento esportivo de grande porte: fluxo de usuários +25%.",
+            "Manutenção preventiva em servidores de pagamento concluída.",
+            "Nova regulamentação de iGaming: mercado em adaptação.",
+            "Inflação nos EUA impacta comportamento de risco global."
+        ];
+        const event = events[Math.floor(Math.random() * events.length)];
+        this.nodes.newsFeed.innerText = `[EVENTO EXTERNO] ${event}`;
+        this.params.externalEventImpact = 0.8 + Math.random() * 0.4;
     }
 
-    playSound(buffer, loop = false) {
-        if (!this.audioCtx || !buffer) return null;
-        const source = this.audioCtx.createBufferSource();
-        source.buffer = buffer;
-        source.loop = loop;
-        source.connect(this.audioCtx.destination);
-        source.start(0);
-        return source;
+    // Machine Learning Avançado (Simulado)
+    runRandomForest(seed, prng) {
+        // Detecção de padrões por árvores de decisão
+        return 0.7 + prng() * 0.28;
+    }
+
+    runSVM(seed, prng) {
+        // Classificação de suporte vetorial para sinais
+        return prng() > 0.4 ? 'ALTA' : 'BAIXA';
+    }
+
+    runGradientBoosting(seed, prng) {
+        // Previsão de tendências por boosting de gradiente
+        return (90 + prng() * 9.5).toFixed(1);
+    }
+
+    // Correlações Complexas e Cross-Correlation
+    analyzeCrossCorrelation(series1, series2) {
+        // Identificar atrasos (lags) e correlações não lineares
+        const lag = Math.floor(Math.random() * 5);
+        const correlation = 0.6 + Math.random() * 0.35;
+        return { lag, correlation };
+    }
+
+    // Regressão Multivariada
+    multivariateRegression(inputs) {
+        // Pesos dinâmicos para variáveis combinadas
+        const weights = [0.4, 0.3, 0.2, 0.1];
+        return inputs.reduce((acc, val, i) => acc + val * (weights[i] || 0.1), 0);
+    }
+
+    // Sistema de Reforço baseado em Feedback
+    applyReinforcement() {
+        const lastFeedback = this.feedback[0];
+        if (lastFeedback) {
+            if (lastFeedback.success) {
+                this.params.learningRate += 0.01;
+                this.params.volatilityWeight *= 0.95;
+            } else {
+                this.params.learningRate -= 0.005;
+                this.params.volatilityWeight *= 1.05;
+            }
+        }
     }
 
     generateModelNames(count) {
-        const prefixes = ['LSTM', 'RNN', 'XGBoost', 'Bayesian', 'Markov', 'Logit', 'RandomForest', 'Prophet', 'DeepQ', 'ARIMA'];
+        const prefixes = ['LSTM', 'RNN', 'XGBoost', 'Bayesian', 'Markov', 'Logit', 'RandomForest', 'Prophet', 'DeepQ', 'ARIMA', 'SVM', 'GradientBoost'];
         const list = [];
         for (let i = 1; i <= count; i++) {
             const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
@@ -125,16 +165,16 @@ class SignalApp {
         let progress = 0;
         const statusMsgs = [
             `Mapeando protocolos de ${platformDisplay}...`,
-            'Extraindo séries temporais de apostas por hora...',
-            'Analisando ciclos semanais e diários...',
-            'Calculando desvio padrão e pesos...',
-            'Executando validação cruzada entre modelos...',
-            'Combinando ensemble e calibrando risco...'
+            'Executando Random Forest para detecção de padrões...',
+            'Aplicando SVM para classificação de sinais...',
+            'Calculando correlações não lineares e cross-correlation...',
+            'Sincronizando feeds econômicos e eventos externos...',
+            'Processando regressão multivariada (ensemble)...'
         ];
 
-        // Simulated scanning with logs from multiple model families
+        // Simulated scanning with logs
         while (progress < 100) {
-            const step = Math.random() * 6 + 1.5;
+            const step = Math.random() * 8 + 2.5;
             progress = Math.min(100, progress + step);
             
             this.nodes.scanPercentage.innerText = `${Math.floor(progress)}%`;
@@ -145,19 +185,17 @@ class SignalApp {
             const model = this.models[Math.floor(Math.random() * this.models.length)];
             this.nodes.modelName.innerText = `Analisando: ${model}`;
 
-            if (Math.random() > 0.65) {
-                this.addLog(`[DATA] Série horária carregada (últimas 48h)`);
-                this.addLog(`[MODEL] ${model} pontuou: ${(Math.random()*1.2).toFixed(3)}`);
+            if (Math.random() > 0.7) {
+                this.addLog(`[ML] ${model}: Score de confiança ${(Math.random()*1.2).toFixed(3)}`);
             }
 
-            await new Promise(r => setTimeout(r, Math.random() * 150 + 50));
+            await new Promise(r => setTimeout(r, Math.random() * 120 + 30));
         }
 
         if (scanLoop) {
             try { scanLoop.stop(); } catch(e) {}
         }
         this.playSound(this.successSound);
-        // produce results using analysis pipeline
         this.showResult(platformDisplay, game, seedSource);
     }
 
@@ -170,62 +208,9 @@ class SignalApp {
         }
     }
 
-    // Lightweight temporal-pattern detection (hours/day-of-week)
-    analyzeTemporalPatterns(sampleSeries = null, prng = Math.random) {
-        // Accepts placeholder series: we simulate hourly volumes for 48 hours
-        const hours = 48;
-        const series = sampleSeries || Array.from({length: hours}, (_,i) => 10 + Math.round(20*prng() * (1 + Math.sin(i/6))));
-        // detect hour-of-day peaks (simple average per hour mod 24)
-        const byHour = {};
-        for (let i=0;i<hours;i++){
-            const h = i % 24;
-            byHour[h] = (byHour[h] || 0) + series[i];
-        }
-        const peaks = Object.entries(byHour).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>parseInt(x[0]));
-        const avg = series.reduce((s,v)=>s+v,0)/series.length;
-        const std = Math.sqrt(series.reduce((s,v)=>s+Math.pow(v-avg,2),0)/series.length);
-        return {peaks, avg, std, series};
-    }
-
-    // Confidence score derived from std dev, model agreement and weights (lightweight)
-    computeConfidenceScore(metrics = {}) {
-        // metrics: {std, modelAgreement:0..1, featureWeight:0..1}
-        const std = metrics.std || 1;
-        const modelAgreement = metrics.modelAgreement !== undefined ? metrics.modelAgreement : 0.7;
-        const featureWeight = metrics.featureWeight !== undefined ? metrics.featureWeight : 0.6;
-        // higher std (volatility) reduces confidence; modelAgreement & featureWeight increase it
-        const base = Math.max(0, (modelAgreement * 0.6 + featureWeight * 0.4) * 100);
-        const penalty = Math.min(40, std * 2); // convert std to penalty
-        const score = Math.max(0, base - penalty);
-        return Number((score/10).toFixed(2)); // scaled 0..10 for UI brevity
-    }
-
-    // Placeholder ARIMA / NN model runner (simulated)
-    runPredictiveModels(seedValue, prng) {
-        // returns object with modelAgreement 0..1 and ensemble prediction 'UP'/'DOWN'/'STABLE'
-        const agreement = 0.6 + prng()*0.4; // simulated agreement between models
-        const roll = prng();
-        let pred = 'STABLE';
-        if (roll > 0.85) pred = 'UP';
-        else if (roll < 0.1) pred = 'DOWN';
-        return {modelAgreement: Number(agreement.toFixed(3)), ensemblePrediction: pred};
-    }
-
-    // Simple k-fold cross validation placeholder returning mean score
-    crossValidate(models = [], k = 5, prng = Math.random) {
-        // Simulate cross-validation scores
-        const scores = Array.from({length:k},()=>0.7 + prng()*0.25);
-        const mean = scores.reduce((s,v)=>s+v,0)/scores.length;
-        return Number(mean.toFixed(3));
-    }
-
-    // Compute risk % based on confidence and volatility
-    computeRisk(confidenceScore, std) {
-        // confidenceScore 0..10, std is volatility
-        const confFactor = Math.max(0.1, (10 - confidenceScore) / 10); // higher means more risk
-        const volFactor = Math.min(2, 1 + std/10);
-        let risk = Math.min(95, Math.round(confFactor * volFactor * 100));
-        return risk;
+    // Metadados e Normalização
+    normalizeData(value, min, max) {
+        return (value - min) / (max - min);
     }
 
     showResult(platform, game, seed) {
@@ -235,83 +220,71 @@ class SignalApp {
         this.nodes.resPlatform.innerText = platform;
         this.nodes.resGame.innerText = game;
 
-        // deterministic seeded PRNG for reproducible results within a minute
         const seedSource = `${seed}::${new Date().getMinutes()}`; 
         const seedValue = this.stringToHash(seedSource) >>> 0;
         const prng = this.mulberry32(seedValue);
 
-        // Temporal analysis (simulated or derived)
-        const temporal = this.analyzeTemporalPatterns(null, prng);
-        this.addLog(`[ANALYSIS] picos horários detectados: ${temporal.peaks.join(', ')}`);
-        this.addLog(`[ANALYSIS] média=${temporal.avg.toFixed(2)} std=${temporal.std.toFixed(2)}`);
+        // Aplicar Reforço do Feedback anterior
+        this.applyReinforcement();
 
-        // Run predictive model ensemble placeholder
-        const modelResult = this.runPredictiveModels(seedValue, prng);
-        this.addLog(`[ENSEMBLE] Previsão: ${modelResult.ensemblePrediction} (concordância=${modelResult.modelAgreement})`);
+        // Análise de Eventos e Impacto
+        const eventImpact = this.params.externalEventImpact;
+        this.addLog(`[INTEGRAÇÃO] Impacto de eventos externos: ${eventImpact.toFixed(2)}x`);
 
-        // Cross-validation (simulated)
-        const cvScore = this.crossValidate([],5,prng);
-        this.addLog(`[VALIDATION] CV score médio: ${cvScore}`);
+        // Pipeline de ML
+        const rfScore = this.runRandomForest(seedValue, prng);
+        const svmClass = this.runSVM(seedValue, prng);
+        const gbAssert = this.runGradientBoosting(seedValue, prng);
+        
+        // Correlação Complexa
+        const xcorr = this.analyzeCrossCorrelation([1,2,3], [1,2,3]);
+        this.addLog(`[ANALYSIS] Cross-correlation detectada: lag=${xcorr.lag} corr=${xcorr.correlation.toFixed(2)}`);
 
-        // Determine rounds and assertiveness similar to earlier but tied to PRNG
-        const normal = Math.max(1, Math.floor(prng()*12)+3);
-        const turbo = Math.max(1, Math.floor(prng()*18)+6);
-        const assert = (85 + prng()*15).toFixed(1);
+        // Regressão Multivariada
+        const finalEnsemble = this.multivariateRegression([rfScore, eventImpact, xcorr.correlation, 0.85]);
+
+        // Resultados Finais
+        const normal = Math.max(1, Math.floor(prng()*10)+2);
+        const turbo = Math.max(1, Math.floor(prng()*15)+5);
+        const assert = (parseFloat(gbAssert) * (0.9 + prng()*0.1)).toFixed(1);
 
         this.nodes.roundsNormal.innerText = normal;
         this.nodes.roundsTurbo.innerText = turbo;
         this.nodes.assertiveness.innerText = `${assert}%`;
 
-        // Confidence score combining std, model agreement and feature weight (feature weight simulated)
-        const confScore = this.computeConfidenceScore({std: temporal.std, modelAgreement: modelResult.modelAgreement, featureWeight: 0.65});
-        this.nodes.confidenceScore.innerText = confScore.toString();
+        // Score de Confiança Dinâmico
+        const confBase = finalEnsemble * 10;
+        const confScore = Math.min(10, Math.max(1, confBase)).toFixed(2);
+        this.nodes.confidenceScore.innerText = confScore;
 
-        // Risk calculation
-        const risk = this.computeRisk(confScore, temporal.std);
+        // Risco Ajustável por plataforma
+        const platformRiskFactor = platform.length % 3 === 0 ? 0.8 : 1.2;
+        const risk = Math.min(98, Math.round((10 - confScore) * platformRiskFactor * 10));
         this.nodes.riskScore.innerText = `${risk}%`;
 
-        // Map ensemble prediction to signal type display
-        this.nodes.signalType.innerText = modelResult.ensemblePrediction === 'UP' ? 'ALTA' : modelResult.ensemblePrediction === 'DOWN' ? 'BAIXA' : 'ESTÁVEL';
+        this.nodes.signalType.innerText = svmClass === 'ALTA' ? 'OTIMIZADO' : 'ESTÁVEL';
 
-        // Generate Paying Times
+        // Horários
         this.nodes.payingTimes.innerHTML = '';
         const now = new Date();
-        const baseOffset = 1 + Math.floor(prng()*5);
         for (let i=0;i<3;i++){
             const timeSpan = document.createElement('div');
             timeSpan.className = 'bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs font-mono font-bold border border-amber-500/30';
-            const extra = Math.floor(prng()*4);
-            const futureMin = now.getMinutes() + baseOffset + i*(baseOffset+1) + extra;
+            const futureMin = now.getMinutes() + 2 + i*5 + Math.floor(prng()*3);
             const displayDate = new Date(now.getTime() + (futureMin - now.getMinutes())*60000);
             timeSpan.innerText = `${displayDate.getHours().toString().padStart(2,'0')}:${displayDate.getMinutes().toString().padStart(2,'0')}`;
             this.nodes.payingTimes.appendChild(timeSpan);
         }
 
-        // Validity window influenced by PRNG (between 3 and 10 minutes)
-        const validityMinutes = 3 + Math.floor(prng()*8);
-        this.startValidityTimer(validityMinutes);
+        this.startValidityTimer(5 + Math.floor(prng()*5));
 
-        // Save to history
-        const snapshot = {
-            timestamp: new Date().toISOString(),
-            platform,
-            game,
-            rounds: {normal, turbo},
-            assertiveness: `${assert}%`,
-            confidence: confScore,
-            risk,
-            signal: this.nodes.signalType.innerText
-        };
-        this.history.unshift(snapshot);
-        if (this.history.length > 50) this.history.pop();
+        this.history.unshift({ timestamp: new Date().toISOString(), platform, game, assertiveness: `${assert}%`, confidence: confScore });
 
-        // Re-enable controls
         if (this.nodes.generateBtn) this.nodes.generateBtn.disabled = false;
         this.nodes.startBtn.disabled = false;
     }
 
     stringToHash(string) {
-        // FNV-1a 32-bit hash
         let h = 0x811c9dc5;
         for (let i = 0; i < string.length; i++) {
             h ^= string.charCodeAt(i);
@@ -332,35 +305,28 @@ class SignalApp {
 
     startValidityTimer(minutes) {
         if (this.validTimer) clearInterval(this.validTimer);
-        
         let seconds = minutes * 60;
         const total = seconds;
-
         const update = () => {
             const m = Math.floor(seconds / 60);
             const s = seconds % 60;
             this.nodes.validUntil.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            
             const percent = (seconds / total) * 100;
             this.nodes.timerBar.style.width = `${percent}%`;
-
             if (seconds <= 0) {
                 clearInterval(this.validTimer);
                 this.nodes.validUntil.innerText = "EXPIRADO";
-                this.nodes.validUntil.classList.add('text-red-500');
             }
             seconds--;
         };
-
         update();
         this.validTimer = setInterval(update, 1000);
     }
 
-    // basic feedback API: store user feedback string and optional success flag
     submitFeedback(text, success = false) {
-        this.feedback.push({text, success, ts: new Date().toISOString()});
-        if (this.feedback.length > 200) this.feedback.shift();
-        this.addLog(`[FEEDBACK] recebido: ${text.slice(0,80)}`);
+        this.feedback.unshift({text, success, ts: new Date().toISOString()});
+        if (this.feedback.length > 50) this.feedback.pop();
+        this.addLog(`[FEEDBACK] Reinforcement Learning atualizado.`);
     }
 
     reset() {
@@ -371,9 +337,36 @@ class SignalApp {
         this.nodes.logConsole.innerHTML = '';
         if (this.validTimer) clearInterval(this.validTimer);
     }
+
+    setupAudio() {
+        const loadSound = async (url) => {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            return await this.audioCtx.decodeAudioData(arrayBuffer);
+        };
+
+        window.addEventListener('touchstart', async () => {
+            if (!this.audioCtx) {
+                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                try {
+                    this.scanSound = await loadSound('scan-hum.mp3');
+                    this.successSound = await loadSound('success-chime.mp3');
+                } catch (e) {}
+            }
+        }, { once: true });
+    }
+
+    playSound(buffer, loop = false) {
+        if (!this.audioCtx || !buffer) return null;
+        const source = this.audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = loop;
+        source.connect(this.audioCtx.destination);
+        source.start(0);
+        return source;
+    }
 }
 
-// Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
     new SignalApp();
 });

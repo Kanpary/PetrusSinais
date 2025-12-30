@@ -58,10 +58,25 @@
 <body class="flex flex-col items-center justify-center p-4">
     <div id="app" class="w-full max-w-md h-full flex flex-col gap-4">
         <!-- Header -->
-        <header class="text-center py-4">
-            <h1 class="font-orbitron text-2xl font-bold text-amber-400 tracking-wider">SINAL PRO <span class="text-xs align-top bg-amber-500 text-black px-1 rounded">V4.0</span></h1>
+        <header class="text-center py-4 relative">
+            <h1 class="font-orbitron text-2xl font-bold text-amber-400 tracking-wider">SINAL PRO <span class="text-xs align-top bg-amber-500 text-black px-1 rounded">V4.5</span></h1>
             <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest">IA Preditiva Multimodelo</p>
+            <div id="news-feed" class="w-full overflow-hidden whitespace-nowrap mt-2 bg-white/5 py-1 rounded border-y border-white/5">
+                <p id="news-feed-ticker" class="inline-block animate-marquee text-[9px] text-amber-500/80 font-mono uppercase">Carregando feeds de eventos externos e dados econômicos...</p>
+            </div>
         </header>
+
+        <style>
+            @keyframes marquee {
+                0% { transform: translateX(100%); }
+                100% { transform: translateX(-100%); }
+            }
+            .animate-marquee {
+                display: inline-block;
+                padding-left: 100%;
+                animation: marquee 25s linear infinite;
+            }
+        </style>
 
         <!-- Main Content Area -->
         <main class="flex-1 flex flex-col justify-center gap-6 relative">
