@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sinal Pro - Gerador de Sinais Avançado</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #fbbf24;
+            --bg-dark: #0a0a0b;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: linear-gradient(to bottom, rgba(10, 10, 11, 0.85), rgba(10, 10, 11, 0.95)), url('chip-background.png');
+            background-size: cover;
+            background-position: center;
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .pulse-gold {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(251, 191, 36, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+        }
+        .scanning-line {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            position: absolute;
+            width: 100%;
+            top: 0;
+            animation: scan 2s linear infinite;
+        }
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        .progress-bar-fill {
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-4">
+    <div id="app" class="w-full max-w-md h-full flex flex-col gap-4">
+        <!-- Header -->
+        <header class="text-center py-4">
+            <h1 class="font-orbitron text-2xl font-bold text-amber-400 tracking-wider">SINAL PRO <span class="text-xs align-top bg-amber-500 text-black px-1 rounded">V4.0</span></h1>
+            <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest">IA Preditiva Multimodelo</p>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col justify-center gap-6 relative">
+            
+            <!-- Input Phase -->
+            <div id="setup-view" class="glass rounded-2xl p-6 flex flex-col gap-4 animate-fade-in">
+                <div class="text-center space-y-2">
+                    <img src="slot-icon.png" alt="Icon" class="w-20 mx-auto drop-shadow-[0_0_15px_rgba(251,191,36,0.5)]">
+                    <h2 class="text-lg font-semibold">Configuração de Varredura</h2>
+                </div>
+                
+                <div class="space-y-3">
+                    <label class="block">
+                        <span class="text-xs text-gray-400 uppercase font-bold">URL da Plataforma</span>
+                        <input id="platform-input" type="url" placeholder="https://plataforma.com/jogo" class="w-full bg-white/5 border border-white/10 rounded-xl p-4 mt-1 focus:outline-none focus:border-amber-500 transition-colors text-sm">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs text-gray-400 uppercase font-bold">Jogo Detectado</span>
+                        <select id="game-select" class="w-full bg-white/5 border border-white/10 rounded-xl p-4 mt-1 focus:outline-none focus:border-amber-500 transition-colors">
+                            <option value="fortune-tiger">Fortune Tiger</option>
+                            <option value="fortune-rabbit">Fortune Rabbit</option>
+                            <option value="fortune-ox">Fortune Ox</option>
+                            <option value="fortune-mouse">Fortune Mouse</option>
+                            <option value="dragon-hatch">Dragon Hatch</option>
+                            <option value="aviator">Aviator</option>
+                            <option value="other">Outro Slot</option>
+                        </select>
+                    </label>
+                </div>
+
+                <button id="start-btn" class="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold py-4 rounded-xl transition-all transform active:scale-95 pulse-gold mt-2">
+                    ANALISAR ALGORITMO
+                </button>
+                <p class="text-[10px] text-center text-gray-500 italic">Varredura profunda em 950 modelos matemáticos simultâneos.</p>
+            </div>
+
+            <!-- Scanning Phase (Hidden by default) -->
+            <div id="scanning-view" class="hidden glass rounded-2xl p-6 flex flex-col gap-6 relative overflow-hidden h-[400px]">
+                <div class="scanning-line"></div>
+                <div class="flex-1 flex flex-col items-center justify-center text-center space-y-4">
+                    <div class="relative">
+                        <div class="w-32 h-32 border-4 border-amber-500/20 rounded-full flex items-center justify-center">
+                            <div id="scan-progress-circle" class="absolute inset-0 border-4 border-amber-500 rounded-full border-t-transparent animate-spin"></div>
+                            <span id="scan-percentage" class="font-orbitron text-2xl text-amber-500">0%</span>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg" id="scan-status">Iniciando Varredura...</h3>
+                        <p id="model-name" class="text-xs text-amber-500/70 font-mono mt-1">Carregando modelos...</p>
+                    </div>
+                </div>
+                
+                <div class="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                    <div id="scan-progress-bar" class="progress-bar-fill bg-amber-500 h-full w-0"></div>
+                </div>
+
+                <div id="log-console" class="bg-black/40 rounded-lg p-3 h-24 overflow-hidden text-[10px] font-mono text-green-400 space-y-1">
+                    <!-- Logs injected here -->
+                </div>
+            </div>
+
+            <!-- Result Phase (Hidden by default) -->
+            <div id="result-view" class="hidden glass border-2 border-amber-500/50 rounded-2xl p-6 flex flex-col gap-6 animate-fade-in">
+                <div class="text-center">
+                    <div class="inline-block bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-xs font-bold mb-2">● SINAL IDENTIFICADO</div>
+                    <h2 class="text-xl font-bold uppercase" id="result-platform-title">PLATAFORMA CARREGADA</h2>
+                    <p class="text-xs text-gray-400" id="result-game-title">Analise Concluída</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white/5 p-3 rounded-xl text-center border border-white/10">
+                        <p class="text-[9px] text-gray-400 uppercase">Modo Normal</p>
+                        <p id="rounds-normal" class="text-xl font-bold text-amber-400">0</p>
+                        <p class="text-[9px] text-gray-400">Rodadas</p>
+                    </div>
+                    <div class="bg-white/5 p-3 rounded-xl text-center border border-white/10">
+                        <p class="text-[9px] text-gray-400 uppercase">Modo Turbo</p>
+                        <p id="rounds-turbo" class="text-xl font-bold text-amber-400">0</p>
+                        <p class="text-[9px] text-gray-400">Rodadas</p>
+                    </div>
+                    <div class="bg-white/5 p-3 rounded-xl text-center border border-white/10">
+                        <p class="text-[9px] text-gray-400 uppercase">Assertividade</p>
+                        <p id="assertiveness" class="text-xl font-bold text-green-400">0%</p>
+                    </div>
+                    <div class="bg-white/5 p-3 rounded-xl text-center border border-white/10">
+                        <p class="text-[9px] text-gray-400 uppercase">Sinal</p>
+                        <p id="signal-type" class="text-xl font-bold text-amber-400">ESTÁVEL</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white/5 p-3 rounded-xl text-center border border-white/10">
+                        <p class="text-[9px] text-gray-400 uppercase">Confiança (score)</p>
+                        <p id="confidence-score" class="text-xl font-bold text-green-300">0.0</p>
+                        <p class="text-[9px] text-gray-400">Base: desvio-padrão & pesos</p>
+                    </div>
+                    <div class="bg-white/5 p-3 rounded-xl text-center border border-white/10">
+                        <p class="text-[9px] text-gray-400 uppercase">Risco Estimado</p>
+                        <p id="risk-score" class="text-xl font-bold text-red-400">0%</p>
+                        <p class="text-[9px] text-gray-400">Stop-loss recomendado</p>
+                    </div>
+                </div>
+
+                <div class="bg-white/5 border border-white/10 p-3 rounded-xl">
+                    <p class="text-[10px] text-gray-400 uppercase font-bold mb-2 text-center">Próximos Horários Pagantes</p>
+                    <div id="paying-times" class="flex justify-around items-center gap-2">
+                        <!-- Times injected here -->
+                    </div>
+                </div>
+
+                <div class="bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl text-center">
+                    <p class="text-[10px] text-amber-500 font-bold uppercase mb-1">Janela de Oportunidade</p>
+                    <div id="valid-until" class="font-orbitron text-lg">00:00</div>
+                    <div class="w-full bg-white/10 h-1 mt-2 rounded-full overflow-hidden">
+                        <div id="valid-timer-bar" class="bg-amber-500 h-full w-full"></div>
+                    </div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button id="generate-again-btn" class="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 rounded-xl transition-all transform active:scale-95 pulse-gold">
+                        Gerar Novo Sinal
+                    </button>
+                    <button id="reset-btn" class="w-28 py-3 text-xs text-gray-400 uppercase tracking-widest hover:text-white transition-colors">
+                        Limpar
+                    </button>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Footer Footer Info -->
+        <footer class="text-center py-4 space-y-2">
+            <div class="flex items-center justify-center gap-2">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span class="text-[10px] text-gray-400 uppercase font-semibold">950 Modelos Preditivos Online</span>
+            </div>
+            <p class="text-[9px] text-gray-600 leading-tight">Esta ferramenta utiliza análise avançada de padrões e regressão logística para identificar janelas de oportunidade estatística.</p>
+        </footer>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://esm.sh/three"
+            }
+        }
+    </script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
