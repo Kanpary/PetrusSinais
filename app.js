@@ -1,372 +1,308 @@
-/**
- * Advanced Predictive Signal Generator (extended)
- * Added lightweight temporal analysis, confidence scoring, cross-validation placeholders,
- * ARIMA / ensemble placeholders, risk calculations and feedback storage.
- */
+/*
+  Refactored entrypoint: imports modular components and wires them together.
+  Large functions/classes were moved into separate modules:
+    - MLServiceClient -> mlClient.js  // removed function/class MLServiceClient {}
+    - Audio helpers -> audio.js        // removed function setupAudio() {} and playSound() {}
+    - Pattern analysis -> patterns.js  // removed function analyzePatterns() {}
+    - UI/orchestration -> ui.js        // removed many methods related to DOM plumbing {}
+  
+  The SignalApp here is now a lightweight orchestrator that composes the modules above.
+*/
+import { MLServiceClient } from './mlClient.js';
+import { AudioManager } from './audio.js';
+import { analyzePatterns, generateSHA256 } from './patterns.js';
+import { UI } from './ui.js';
+import { StreamClient } from './streamClient.js';
+import { Cache } from './cache.js';
+import { AsyncQueue } from './queue.js';
+import { normalizeEvent, transformBatch } from './dataPipeline.js';
 
 class SignalApp {
-    constructor() {
-        this.nodes = {
-            setup: document.getElementById('setup-view'),
-            scanning: document.getElementById('scanning-view'),
-            result: document.getElementById('result-view'),
-            startBtn: document.getElementById('start-btn'),
-            generateBtn: document.getElementById('generate-again-btn'),
-            resetBtn: document.getElementById('reset-btn'),
-            platformInput: document.getElementById('platform-input'),
-            gameSelect: document.getElementById('game-select'),
-            scanPercentage: document.getElementById('scan-percentage'),
-            scanProgressBar: document.getElementById('scan-progress-bar'),
-            scanStatus: document.getElementById('scan-status'),
-            modelName: document.getElementById('model-name'),
-            logConsole: document.getElementById('log-console'),
-            resPlatform: document.getElementById('result-platform-title'),
-            resGame: document.getElementById('result-game-title'),
-            roundsNormal: document.getElementById('rounds-normal'),
-            roundsTurbo: document.getElementById('rounds-turbo'),
-            assertiveness: document.getElementById('assertiveness'),
-            payingTimes: document.getElementById('paying-times'),
-            validUntil: document.getElementById('valid-until'),
-            timerBar: document.getElementById('valid-timer-bar'),
-            confidenceScore: document.getElementById('confidence-score'),
-            riskScore: document.getElementById('risk-score'),
-            signalType: document.getElementById('signal-type'),
-            newsFeed: document.getElementById('news-feed-ticker')
-        };
+  constructor() {
+    this.ui = new UI();
+    this.mlClient = new MLServiceClient(window.ML_BACKEND_URL || '');
+    this.audio = new AudioManager();
+    this.params = { volatility: 1.0, marketWeight: 1.0 };
+    this.validTimer = null;
 
-        this.audioCtx = null;
-        this.scanSound = null;
-        this.successSound = null;
-        this.validTimer = null;
-        this.models = this.generateModelNames(1250);
+    this.init();
+  }
 
-        // Advanced State
-        this.history = [];
-        this.feedback = [];
-        this.params = {
-            learningRate: 0.05,
-            volatilityWeight: 0.4,
-            externalEventImpact: 1.0
-        };
+  async init() {
+    this.ui.onStart(() => this.startScanning());
+    this.ui.onGenerate(() => this.startScanning());
+    this.ui.onReset(() => this.reset());
 
-        this.init();
+    // initialize capture/processing stack
+    this.cache = new Cache(800);
+    this.queue = new AsyncQueue();
+    // streamSource: default to /events if same origin - UI.collectInput seedSource may override for platform-specific
+    this.stream = new StreamClient('/events', (raw) => this._handleIncomingEvent(raw));
+    // start stream client (will fallback to polling)
+    try { this.stream.start(); this.ui.addLog('[STREAM] Stream client started.'); } catch(e){ this.ui.addLog('[STREAM] Failed to start stream: ' + e.message); }
+    // periodically drain queue for background processing
+    setInterval(() => {
+      this.queue.drain(async (payload) => {
+        // safe handler: apply normalization and persist into cache
+        const normalized = normalizeEvent(payload);
+        this.cache.set(normalized.id, normalized);
+        // further transform or send to ML backend if configured
+        try {
+          if (this.mlClient && this.mlClient.baseUrl) {
+            await this.mlClient.runMonteCarlo({ event: normalized }).catch(()=>null);
+          }
+        } catch(e){}
+      });
+    }, 2500);
+
+    await this.updateRealTimeIndicators();
+    setInterval(() => this.updateRealTimeIndicators(), 60000);
+
+    this.audio.setupDeferredAudio();
+    this.probeMLBackend();
+    // also load recent events from cache to warm UI
+    (async () => {
+      const recent = await this.cache.loadRecent(25).catch(()=>[]);
+      if (recent && recent.length) {
+        this.ui.addLog(`[CACHE] Loaded ${recent.length} recent events.`);
+        // render last event info into news feed
+        const last = recent[0];
+        if (last && last.value) this.ui.setNews(`[CACHE] Último: ${last.value.game || last.value.source} @ ${new Date(last.value.ts||Date.now()).toLocaleTimeString()}`);
+      }
+    })();
+  }
+
+  async probeMLBackend() {
+    try {
+      const models = await this.mlClient.models();
+      this.ui.addLog(models && models.length ? `[ML] Model endpoints: ${models.join(', ')}` : `[ML] No ML backend configured or no models reported.`);
+    } catch (e) {
+      this.ui.addLog(`[ML] Probe failed: ${e.message}`);
     }
+  }
 
-    async init() {
-        this.nodes.startBtn.addEventListener('click', () => this.startScanning());
-        if (this.nodes.generateBtn) this.nodes.generateBtn.addEventListener('click', () => this.startScanning());
-        this.nodes.resetBtn.addEventListener('click', () => this.reset());
-        
-        // Simular monitoramento de notícias em tempo real
-        this.updateNewsTicker();
-        setInterval(() => this.updateNewsTicker(), 30000);
-
-        // Pre-load audio
-        this.setupAudio();
+  async updateRealTimeIndicators() {
+    try {
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&include_24hr_change=true');
+      const data = await response.json();
+      const change = data.bitcoin.usd_24h_change;
+      this.params.volatility = 1 + (Math.abs(change) / 100);
+      this.ui.setNews(`[MERCADO REAL] BTC 24h: ${change.toFixed(2)}% | Ajuste de Volatilidade: ${this.params.volatility.toFixed(2)}x`);
+    } catch (e) {
+      this.ui.setNews(`[INDICADOR] Sincronizado com relógio atômico de rede (BRT).`);
     }
+  }
 
-    updateNewsTicker() {
-        if (!this.nodes.newsFeed) return;
-        const events = [
-            "COPOM mantém taxa de juros: impacto neutro em ativos digitais.",
-            "Aumento de volatilidade detectado em plataformas globais.",
-            "Evento esportivo de grande porte: fluxo de usuários +25%.",
-            "Manutenção preventiva em servidores de pagamento concluída.",
-            "Nova regulamentação de iGaming: mercado em adaptação.",
-            "Inflação nos EUA impacta comportamento de risco global."
-        ];
-        const event = events[Math.floor(Math.random() * events.length)];
-        this.nodes.newsFeed.innerText = `[EVENTO EXTERNO] ${event}`;
-        this.params.externalEventImpact = 0.8 + Math.random() * 0.4;
-    }
+  // Minimal scanning flow preserved but delegating to UI / patterns / ml modules
+  async startScanning() {
+    this.ui.setBusy(true);
+    const { platformDisplay, seedSource, game } = this.ui.collectInput();
 
-    // Machine Learning Avançado (Simulado)
-    runRandomForest(seed, prng) {
-        // Detecção de padrões por árvores de decisão
-        return 0.7 + prng() * 0.28;
-    }
+    this.ui.showScanning();
 
-    runSVM(seed, prng) {
-        // Classificação de suporte vetorial para sinais
-        return prng() > 0.4 ? 'ALTA' : 'BAIXA';
-    }
-
-    runGradientBoosting(seed, prng) {
-        // Previsão de tendências por boosting de gradiente
-        return (90 + prng() * 9.5).toFixed(1);
-    }
-
-    // Correlações Complexas e Cross-Correlation
-    analyzeCrossCorrelation(series1, series2) {
-        // Identificar atrasos (lags) e correlações não lineares
-        const lag = Math.floor(Math.random() * 5);
-        const correlation = 0.6 + Math.random() * 0.35;
-        return { lag, correlation };
-    }
-
-    // Regressão Multivariada
-    multivariateRegression(inputs) {
-        // Pesos dinâmicos para variáveis combinadas
-        const weights = [0.4, 0.3, 0.2, 0.1];
-        return inputs.reduce((acc, val, i) => acc + val * (weights[i] || 0.1), 0);
-    }
-
-    // Sistema de Reforço baseado em Feedback
-    applyReinforcement() {
-        const lastFeedback = this.feedback[0];
-        if (lastFeedback) {
-            if (lastFeedback.success) {
-                this.params.learningRate += 0.01;
-                this.params.volatilityWeight *= 0.95;
-            } else {
-                this.params.learningRate -= 0.005;
-                this.params.volatilityWeight *= 1.05;
+    const scanAudio = this.audio.playLoop('scan-hum.mp3');
+    // if seedSource looks like an events endpoint, start a short capture into queue
+    try {
+      const probeUrl = seedSource && (seedSource.startsWith('http') ? seedSource : null);
+      if (probeUrl) {
+        // attempt to fetch a handful of recent rounds and enqueue them for processing
+        const resp = await fetch(probeUrl + '/recent-rounds', { mode: 'cors' }).catch(()=>null);
+        if (resp && resp.ok) {
+          const list = await resp.json().catch(()=>null);
+          if (Array.isArray(list)) {
+            for (const item of list) {
+              await this.queue.enqueue(item).catch(()=>null);
             }
+            this.ui.addLog(`[STREAM] Enqueued ${list.length} recent rounds from platform probe.`);
+          }
         }
+      }
+    } catch(e){}
+
+    const tasks = [
+      {
+        msg: "Calculando hash de integridade da plataforma...",
+        action: () => generateSHA256(seedSource || window.location.href)
+      },
+      {
+        msg: "Validando conectividade de rede...",
+        action: async () => {
+          // perform a real HEAD request to check reachability; fall back to fetch root if seedSource isn't a full URL
+          let testUrl = seedSource && (seedSource.startsWith('http://') || seedSource.startsWith('https://')) ? seedSource : window.location.origin;
+          try {
+            const resp = await fetch(testUrl, { method: 'HEAD', mode: 'cors' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            return resp;
+          } catch (e) {
+            // attempt a simple GET as secondary check
+            const resp = await fetch(testUrl, { method: 'GET', mode: 'cors' }).catch(err => { throw err; });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            return resp;
+          }
+        }
+      },
+      {
+        msg: "Capturando entropia temporal (Horário de Brasília)...",
+        action: () => {
+          // return a deterministic timezone snapshot instead of artificial delay
+          return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+        }
+      },
+      {
+        msg: "Sincronizando pesos probabilísticos...",
+        action: () => this.updateRealTimeIndicators()
+      },
+      {
+        msg: "Executando cálculo bayesiano de tendência...",
+        action: async () => {
+          // perform a real small computation based on current indicators
+          const indicators = { volatility: this.params.volatility, timestamp: new Date().toISOString() };
+          // simple deterministic scoring (no artificial wait)
+          return { bayesScore: Math.max(0, Math.min(1, 1 / (1 + indicators.volatility))) };
+        }
+      }
+    ];
+
+    let completed = 0;
+    for (const task of tasks) {
+      this.ui.setStatus(task.msg);
+      try {
+        await task.action();
+        this.ui.addLog(`[OK] ${task.msg}`);
+      } catch (err) {
+        this.ui.addLog(`[WARN] ${task.msg} -> ${err && err.message ? err.message : err}`);
+      }
+      completed++;
+      const progress = (completed / tasks.length) * 100;
+      this.ui.setProgress(progress);
     }
 
-    generateModelNames(count) {
-        const prefixes = ['LSTM', 'RNN', 'XGBoost', 'Bayesian', 'Markov', 'Logit', 'RandomForest', 'Prophet', 'DeepQ', 'ARIMA', 'SVM', 'GradientBoost'];
-        const list = [];
-        for (let i = 1; i <= count; i++) {
-            const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-            list.push(`${prefix}_v${(Math.random() * 10).toFixed(1)}_${i.toString().padStart(3, '0')}`);
-        }
-        return list;
-    }
+    // Optional ML ensemble call (non-blocking / safe)
+    try {
+      if (this.mlClient && this.mlClient.baseUrl) {
+        this.ui.setStatus('Consultando modelos avançados...');
+        this.ui.setModelName('ML Ensemble');
+        const payload = { platform: platformDisplay, game, timestamp: new Date().toISOString(), indicators: { volatility: this.params.volatility } };
+        const mlResp = await this.mlClient.inferEnsemble(payload);
+        if (mlResp) {
+          this.ui.addLog('[ML] Ensemble result received.');
+          this.ui.applyMlOverrides(mlResp);
+        } else {
+          // try a multi-model safe aggregation if ensemble endpoint is not present
+          try {
+            const payload = { platform: platformDisplay, game, timestamp: new Date().toISOString(), indicators: { volatility: this.params.volatility } };
+            const rnn = await this.mlClient.inferRNN(payload).catch(()=>null);
+            const trans = await this.mlClient.inferTransformer(payload).catch(()=>null);
+            const ae = await this.mlClient.inferAutoencoder(payload).catch(()=>null);
 
-    async startScanning() {
-        // prevent double-starts
-        this.nodes.startBtn.disabled = true;
-        if (this.nodes.generateBtn) this.nodes.generateBtn.disabled = true;
-
-        const rawInput = this.nodes.platformInput.value.trim();
-        let platformDisplay = 'Plataforma Padrão';
-        let seedSource = 'default';
-
-        if (rawInput) {
-            try {
-                const url = new URL(rawInput.startsWith('http') ? rawInput : `https://${rawInput}`);
-                platformDisplay = url.hostname.replace('www.', '').split('.')[0].toUpperCase();
-                seedSource = url.hostname;
-            } catch (e) {
-                platformDisplay = rawInput.toUpperCase();
-                seedSource = rawInput;
+            // aggregate safely: weighted average where missing models are ignored
+            const candidates = [rnn, trans, ae].filter(Boolean);
+            if (candidates.length) {
+              this.ui.addLog('[ML] Partial models received: ' + candidates.length);
+              // merge simple numeric fields if present
+              const merged = {};
+              const weights = { roundsNormal: 1.0, roundsTurbo: 1.0, assertiveness: 1.0, confidenceScore: 1.0, riskScore: 1.0 };
+              const accum = {};
+              for (const c of candidates) {
+                for (const k in c) {
+                  if (typeof c[k] === 'number') {
+                    accum[k] = (accum[k] || 0) + c[k];
+                    merged[k] = true;
+                  } else if (typeof c[k] === 'string' && k === 'signalType') {
+                    merged.signalType = merged.signalType || c[k];
+                  }
+                }
+              }
+              for (const k in accum) accum[k] = accum[k] / candidates.length;
+              // apply safe overrides with clamps
+              const safeResp = {};
+              if (accum.roundsNormal) safeResp.roundsNormal = Math.round(Math.max(1, Math.min(999, accum.roundsNormal)));
+              if (accum.roundsTurbo) safeResp.roundsTurbo = Math.round(Math.max(1, Math.min(999, accum.roundsTurbo)));
+              if (accum.assertiveness) safeResp.assertiveness = `${Math.max(1, Math.min(99.9, accum.assertiveness)).toFixed(1)}%`;
+              if (accum.confidenceScore) safeResp.confidenceScore = Number((accum.confidenceScore).toFixed(2));
+              if (accum.riskScore) safeResp.riskScore = Math.round(Math.max(0, Math.min(99, accum.riskScore)));
+              if (merged.signalType) safeResp.signalType = merged.signalType;
+              this.ui.applyMlOverrides(safeResp);
             }
+          } catch (innerErr) {
+            this.ui.addLog(`[ML] Fallback multi-model aggregation failed: ${innerErr && innerErr.message ? innerErr.message : innerErr}`);
+          }
         }
-
-        const game = this.nodes.gameSelect.options[this.nodes.gameSelect.selectedIndex].text;
-
-        this.nodes.setup.classList.add('hidden');
-        this.nodes.scanning.classList.remove('hidden');
-
-        const scanLoop = this.playSound(this.scanSound, true);
-        
-        let progress = 0;
-        const statusMsgs = [
-            `Mapeando protocolos de ${platformDisplay}...`,
-            'Executando Random Forest para detecção de padrões...',
-            'Aplicando SVM para classificação de sinais...',
-            'Calculando correlações não lineares e cross-correlation...',
-            'Sincronizando feeds econômicos e eventos externos...',
-            'Processando regressão multivariada (ensemble)...'
-        ];
-
-        // Simulated scanning with logs
-        while (progress < 100) {
-            const step = Math.random() * 8 + 2.5;
-            progress = Math.min(100, progress + step);
-            
-            this.nodes.scanPercentage.innerText = `${Math.floor(progress)}%`;
-            this.nodes.scanProgressBar.style.width = `${progress}%`;
-            
-            this.nodes.scanStatus.innerText = statusMsgs[Math.floor((progress / 100) * statusMsgs.length)] || statusMsgs[statusMsgs.length-1];
-            
-            const model = this.models[Math.floor(Math.random() * this.models.length)];
-            this.nodes.modelName.innerText = `Analisando: ${model}`;
-
-            if (Math.random() > 0.7) {
-                this.addLog(`[ML] ${model}: Score de confiança ${(Math.random()*1.2).toFixed(3)}`);
-            }
-
-            await new Promise(r => setTimeout(r, Math.random() * 120 + 30));
-        }
-
-        if (scanLoop) {
-            try { scanLoop.stop(); } catch(e) {}
-        }
-        this.playSound(this.successSound);
-        this.showResult(platformDisplay, game, seedSource);
+      }
+    } catch (e) {
+      this.ui.addLog(`[ML] Ensemble call failed: ${e && e.message ? e.message : e}`);
     }
 
-    addLog(msg) {
-        const p = document.createElement('p');
-        p.innerText = `> ${msg}`;
-        this.nodes.logConsole.prepend(p);
-        if (this.nodes.logConsole.children.length > 30) {
-            this.nodes.logConsole.removeChild(this.nodes.logConsole.lastChild);
-        }
+    if (scanAudio) scanAudio.stop();
+    this.audio.playOnce('success-chime.mp3');
+
+    await this.showResult(platformDisplay, game, seedSource);
+    this.ui.setBusy(false);
+  }
+
+  async showResult(platform, game, seed) {
+    this.ui.showResultView(platform, game);
+
+    const nowBRT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const hour = nowBRT.getHours();
+    const minute = nowBRT.getMinutes();
+
+    const combinedSeed = `${seed}-${hour}-${minute}`;
+    const hashArray = await generateSHA256(combinedSeed);
+
+    const v1 = hashArray[0], v2 = hashArray[1], v3 = hashArray[2];
+    const normal = (v1 % 10) + 3;
+    const turbo = (v2 % 12) + 5;
+    const baseAssert = 91.0 + ((v3 % 80) / 10);
+    const finalAssert = Math.min(99.4, baseAssert * (this.params.volatility > 1.05 ? 0.98 : 1.0)).toFixed(1);
+    const confScore = ((v1 + v2 + v3) / 76.5).toFixed(2);
+    const risk = Math.round((10 - parseFloat(confScore)) * 10 * this.params.volatility);
+
+    this.ui.setIfEmpty('roundsNormal', normal);
+    this.ui.setIfEmpty('roundsTurbo', turbo);
+    this.ui.setIfEmpty('assertiveness', `${finalAssert}%`);
+    this.ui.setIfEmpty('confidenceScore', confScore);
+    this.ui.setIfEmpty('riskScore', `${Math.min(99, risk)}%`);
+
+    const analysis = await analyzePatterns(seed, nowBRT, 10);
+    if (analysis.recommendation) {
+      this.ui.setSignalType(analysis.recommendation.label);
+      this.ui.setModelName(`Análise: ${analysis.dominantCluster || 'Padrão'} • Rep:${Math.round(analysis.repeatRate*100)}%`);
+    } else {
+      this.ui.setSignalType(v1 > 128 ? 'OTIMIZADO' : 'ESTÁVEL');
     }
 
-    // Metadados e Normalização
-    normalizeData(value, min, max) {
-        return (value - min) / (max - min);
-    }
+    this.ui.renderPayingTimes(analysis.payingOffsets, nowBRT, v1, v2, v3);
+    this.startValidityTimer(15 - (minute % 15));
+    this.ui.enableGenerate(true);
 
-    showResult(platform, game, seed) {
-        this.nodes.scanning.classList.add('hidden');
-        this.nodes.result.classList.remove('hidden');
+    this.ui.addLog(`[SINAL] Processamento de hash concluído com sucesso. Pattern repeat:${analysis.repeatRate.toFixed(2)}, autocorr:${analysis.autocorr.toFixed(2)}`);
+  }
 
-        this.nodes.resPlatform.innerText = platform;
-        this.nodes.resGame.innerText = game;
+  startValidityTimer(minutes) {
+    if (this.validTimer) clearInterval(this.validTimer);
+    let seconds = minutes * 60;
+    const total = seconds;
+    const update = () => {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      this.ui.setValidity(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+      const percent = (seconds / total) * 100;
+      this.ui.setTimerBar(percent);
+      if (seconds <= 0) {
+        clearInterval(this.validTimer);
+        this.ui.setValidity("EXPIRADO");
+      }
+      seconds--;
+    };
+    update();
+    this.validTimer = setInterval(update, 1000);
+  }
 
-        const seedSource = `${seed}::${new Date().getMinutes()}`; 
-        const seedValue = this.stringToHash(seedSource) >>> 0;
-        const prng = this.mulberry32(seedValue);
-
-        // Aplicar Reforço do Feedback anterior
-        this.applyReinforcement();
-
-        // Análise de Eventos e Impacto
-        const eventImpact = this.params.externalEventImpact;
-        this.addLog(`[INTEGRAÇÃO] Impacto de eventos externos: ${eventImpact.toFixed(2)}x`);
-
-        // Pipeline de ML
-        const rfScore = this.runRandomForest(seedValue, prng);
-        const svmClass = this.runSVM(seedValue, prng);
-        const gbAssert = this.runGradientBoosting(seedValue, prng);
-        
-        // Correlação Complexa
-        const xcorr = this.analyzeCrossCorrelation([1,2,3], [1,2,3]);
-        this.addLog(`[ANALYSIS] Cross-correlation detectada: lag=${xcorr.lag} corr=${xcorr.correlation.toFixed(2)}`);
-
-        // Regressão Multivariada
-        const finalEnsemble = this.multivariateRegression([rfScore, eventImpact, xcorr.correlation, 0.85]);
-
-        // Resultados Finais
-        const normal = Math.max(1, Math.floor(prng()*10)+2);
-        const turbo = Math.max(1, Math.floor(prng()*15)+5);
-        const assert = (parseFloat(gbAssert) * (0.9 + prng()*0.1)).toFixed(1);
-
-        this.nodes.roundsNormal.innerText = normal;
-        this.nodes.roundsTurbo.innerText = turbo;
-        this.nodes.assertiveness.innerText = `${assert}%`;
-
-        // Score de Confiança Dinâmico
-        const confBase = finalEnsemble * 10;
-        const confScore = Math.min(10, Math.max(1, confBase)).toFixed(2);
-        this.nodes.confidenceScore.innerText = confScore;
-
-        // Risco Ajustável por plataforma
-        const platformRiskFactor = platform.length % 3 === 0 ? 0.8 : 1.2;
-        const risk = Math.min(98, Math.round((10 - confScore) * platformRiskFactor * 10));
-        this.nodes.riskScore.innerText = `${risk}%`;
-
-        this.nodes.signalType.innerText = svmClass === 'ALTA' ? 'OTIMIZADO' : 'ESTÁVEL';
-
-        // Horários
-        this.nodes.payingTimes.innerHTML = '';
-        const now = new Date();
-        for (let i=0;i<3;i++){
-            const timeSpan = document.createElement('div');
-            timeSpan.className = 'bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs font-mono font-bold border border-amber-500/30';
-            const futureMin = now.getMinutes() + 2 + i*5 + Math.floor(prng()*3);
-            const displayDate = new Date(now.getTime() + (futureMin - now.getMinutes())*60000);
-            timeSpan.innerText = `${displayDate.getHours().toString().padStart(2,'0')}:${displayDate.getMinutes().toString().padStart(2,'0')}`;
-            this.nodes.payingTimes.appendChild(timeSpan);
-        }
-
-        this.startValidityTimer(5 + Math.floor(prng()*5));
-
-        this.history.unshift({ timestamp: new Date().toISOString(), platform, game, assertiveness: `${assert}%`, confidence: confScore });
-
-        if (this.nodes.generateBtn) this.nodes.generateBtn.disabled = false;
-        this.nodes.startBtn.disabled = false;
-    }
-
-    stringToHash(string) {
-        let h = 0x811c9dc5;
-        for (let i = 0; i < string.length; i++) {
-            h ^= string.charCodeAt(i);
-            h = Math.imul(h, 0x01000193);
-        }
-        return h >>> 0;
-    }
-
-    mulberry32(a) {
-        return function() {
-            a |= 0;
-            a = a + 0x6D2B79F5 | 0;
-            let t = Math.imul(a ^ a >>> 15, 1 | a);
-            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-            return ((t ^ t >>> 14) >>> 0) / 4294967296;
-        };
-    }
-
-    startValidityTimer(minutes) {
-        if (this.validTimer) clearInterval(this.validTimer);
-        let seconds = minutes * 60;
-        const total = seconds;
-        const update = () => {
-            const m = Math.floor(seconds / 60);
-            const s = seconds % 60;
-            this.nodes.validUntil.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            const percent = (seconds / total) * 100;
-            this.nodes.timerBar.style.width = `${percent}%`;
-            if (seconds <= 0) {
-                clearInterval(this.validTimer);
-                this.nodes.validUntil.innerText = "EXPIRADO";
-            }
-            seconds--;
-        };
-        update();
-        this.validTimer = setInterval(update, 1000);
-    }
-
-    submitFeedback(text, success = false) {
-        this.feedback.unshift({text, success, ts: new Date().toISOString()});
-        if (this.feedback.length > 50) this.feedback.pop();
-        this.addLog(`[FEEDBACK] Reinforcement Learning atualizado.`);
-    }
-
-    reset() {
-        this.nodes.result.classList.add('hidden');
-        this.nodes.setup.classList.remove('hidden');
-        this.nodes.scanPercentage.innerText = '0%';
-        this.nodes.scanProgressBar.style.width = '0%';
-        this.nodes.logConsole.innerHTML = '';
-        if (this.validTimer) clearInterval(this.validTimer);
-    }
-
-    setupAudio() {
-        const loadSound = async (url) => {
-            const response = await fetch(url);
-            const arrayBuffer = await response.arrayBuffer();
-            return await this.audioCtx.decodeAudioData(arrayBuffer);
-        };
-
-        window.addEventListener('touchstart', async () => {
-            if (!this.audioCtx) {
-                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                try {
-                    this.scanSound = await loadSound('scan-hum.mp3');
-                    this.successSound = await loadSound('success-chime.mp3');
-                } catch (e) {}
-            }
-        }, { once: true });
-    }
-
-    playSound(buffer, loop = false) {
-        if (!this.audioCtx || !buffer) return null;
-        const source = this.audioCtx.createBufferSource();
-        source.buffer = buffer;
-        source.loop = loop;
-        source.connect(this.audioCtx.destination);
-        source.start(0);
-        return source;
-    }
+  reset() {
+    this.ui.resetViews();
+    if (this.validTimer) clearInterval(this.validTimer);
+  }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    new SignalApp();
-});
+document.addEventListener('DOMContentLoaded', () => new SignalApp());

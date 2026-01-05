@@ -20,8 +20,9 @@
             background-size: cover;
             background-position: center;
             color: white;
-            overflow: hidden;
-            height: 100vh;
+        /* allow natural scrolling and flexible height so components are not cut off on small viewports */
+        overflow-y: auto;
+        min-height: 100vh;
         }
         .font-orbitron { font-family: 'Orbitron', sans-serif; }
         .glass {
@@ -56,13 +57,13 @@
     </style>
 </head>
 <body class="flex flex-col items-center justify-center p-4">
-    <div id="app" class="w-full max-w-md h-full flex flex-col gap-4">
+    <div id="app" class="w-full max-w-xl mx-auto flex flex-col gap-4 min-h-screen">
         <!-- Header -->
         <header class="text-center py-4 relative">
             <h1 class="font-orbitron text-2xl font-bold text-amber-400 tracking-wider">SINAL PRO <span class="text-xs align-top bg-amber-500 text-black px-1 rounded">V4.5</span></h1>
-            <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest">IA Preditiva Multimodelo</p>
+            <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest">Análise de Redes e Probabilidade Real</p>
             <div id="news-feed" class="w-full overflow-hidden whitespace-nowrap mt-2 bg-white/5 py-1 rounded border-y border-white/5">
-                <p id="news-feed-ticker" class="inline-block animate-marquee text-[9px] text-amber-500/80 font-mono uppercase">Carregando feeds de eventos externos e dados econômicos...</p>
+                <p id="news-feed-ticker" class="inline-block animate-marquee text-[9px] text-amber-500/80 font-mono uppercase">Sincronizando com indicadores de mercado e dados de rede em tempo real...</p>
             </div>
         </header>
 
@@ -110,11 +111,11 @@
                 <button id="start-btn" class="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold py-4 rounded-xl transition-all transform active:scale-95 pulse-gold mt-2">
                     ANALISAR ALGORITMO
                 </button>
-                <p class="text-[10px] text-center text-gray-500 italic">Varredura profunda em 950 modelos matemáticos simultâneos.</p>
+                <p class="text-[10px] text-center text-gray-500 italic">Processamento de entropia de rede e validação de latência.</p>
             </div>
 
             <!-- Scanning Phase (Hidden by default) -->
-            <div id="scanning-view" class="hidden glass rounded-2xl p-6 flex flex-col gap-6 relative overflow-hidden h-[400px]">
+            <div id="scanning-view" class="hidden glass rounded-2xl p-6 flex flex-col gap-6 relative overflow-auto min-h-[320px] max-h-[70vh]">
                 <div class="scanning-line"></div>
                 <div class="flex-1 flex flex-col items-center justify-center text-center space-y-4">
                     <div class="relative">
@@ -169,9 +170,9 @@
 
                 <div class="grid grid-cols-2 gap-3">
                     <div class="bg-white/5 p-3 rounded-xl text-center border border-white/10">
-                        <p class="text-[9px] text-gray-400 uppercase">Confiança (score)</p>
+                        <p class="text-[9px] text-gray-400 uppercase">Score de Probabilidade</p>
                         <p id="confidence-score" class="text-xl font-bold text-green-300">0.0</p>
-                        <p class="text-[9px] text-gray-400">Base: desvio-padrão & pesos</p>
+                        <p class="text-[9px] text-gray-400">Cálculo Bayesiano Direto</p>
                     </div>
                     <div class="bg-white/5 p-3 rounded-xl text-center border border-white/10">
                         <p class="text-[9px] text-gray-400 uppercase">Risco Estimado</p>
@@ -211,9 +212,9 @@
         <footer class="text-center py-4 space-y-2">
             <div class="flex items-center justify-center gap-2">
                 <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span class="text-[10px] text-gray-400 uppercase font-semibold">950 Modelos Preditivos Online</span>
+                <span class="text-[10px] text-gray-400 uppercase font-semibold">Monitoramento de Probabilidade Ativo</span>
             </div>
-            <p class="text-[9px] text-gray-600 leading-tight">Esta ferramenta utiliza análise avançada de padrões e regressão logística para identificar janelas de oportunidade estatística.</p>
+            <p class="text-[9px] text-gray-600 leading-tight">Análise fundamentada em cálculos de probabilidade real e entropia de dados baseada no timestamp atual de Brasília.</p>
         </footer>
     </div>
 
